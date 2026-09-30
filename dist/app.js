@@ -1,4 +1,5 @@
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+import { setupBobbinUI } from './bobbin-ui.js';
 const apiOrigin='';
 const rosetteIcon='<circle cx="20" cy="20" r="6"/><g>'+Array.from({length:6},(_,i)=>`<ellipse cx="20" cy="8" rx="4" ry="7" transform="rotate(${i*60} 20 20)"/>`).join('')+'</g>';
 const motifs={rosette:{label:'Rosette',icon:rosetteIcon},scroll:{label:'Scroll',icon:'<path d="M7 28c18 2 4-22 19-20 11 1 1 17 7 14"/><path d="M10 10c2 8 10 6 12 0"/>'},botanical:{label:'Leaf vine',icon:'<path d="M20 34C7 26 7 11 29 7"/><path d="M18 27C8 27 6 18 8 15c6 0 10 3 10 12M23 18c0-8 6-11 12-10 0 6-4 9-12 10"/>'},diamond:{label:'Openwork',icon:'<path d="M20 3 36 20 20 37 4 20Z M20 10 29 20 20 30 11 20Z"/><path d="M4 20h32M20 3v34"/>'}};
@@ -70,3 +71,10 @@ function analyze(){if(!sourceImage)return;const t=Number($('#threshold').value);
 $('#upload').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{const i=new Image();i.onload=()=>{$('#analysisEmpty').hidden=true;$('#analysisCanvas').hidden=false;sourceImage=i;analyze()};i.src=r.result};r.readAsDataURL(f)};$('#threshold').oninput=analyze;$('#imageInvert').onchange=analyze;$('#exportAnalysis').onclick=()=>{if(!sourceImage)return toast('Import an image first');const blob=new Blob([JSON.stringify({source:'local image',threshold:$('#threshold').value,invert:$('#imageInvert').checked,notes:$('#sampleNotes').value,method:'threshold + 8-neighbour components'},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='lace-image-observation.json';a.click()};
 $$('dialog .dialog-close').forEach(b=>b.onclick=()=>b.closest('dialog').close());
 setupChoices();sync();renderAtlas();checkConnection();if(location.hash)showPage(location.hash.slice(1));
+const originalRecipe=recipe;
+recipe=()=>`Making process: handmade bobbin lace only. Crossed and twisted thread pairs, woven areas, plaited joins and bobbin ground. Do not mix needle lace, crochet, tatting or cutwork. Same-process image reference: ${settings.reference||'none'}. ${originalRecipe().replace('no ground; separated motifs','no net; motifs joined through bobbin plaits')}`;
+renderAtlas=setupBobbinUI({getSettings:()=>settings,cases,sync,showPage,toast,loadMotif:family=>{settings.motif=family},openCase,getGeneratedProcess:()=>generatedSettings?.process==='bobbin'});
+const originalGenerate=generate;
+generate=async event=>{const previousImage=currentImage;Object.assign(settings,{process:'bobbin',reference:settings.reference||'none'});await originalGenerate(event);if(currentImage!==previousImage&&generatedSettings?.process==='bobbin'){$('#imageCaption').textContent='Bobbin lace study · '+$('#imageCaption').textContent;$('#resultNote').textContent='Bobbin visual hypothesis. Compare thread paths, woven areas and joins; a lace maker must check workability.'}};
+$('#patternForm').onsubmit=generate;
+sync();

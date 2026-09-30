@@ -83,5 +83,6 @@ dialog{background:linear-gradient(135deg,#ffffffed,#eaf3f9ee);backdrop-filter:bl
 .lab-brand{display:block;flex:none;width:205px;text-decoration:none}
 .lab-brand img{width:100%;height:auto;filter:brightness(0);opacity:.72;transition:opacity .2s}
 .lab-brand:hover img,.lab-brand:focus-visible img{opacity:1}
+.making-process{padding:20px 0 24px;margin-bottom:22px;border-top:1px solid #dbe5ea;border-bottom:1px solid #dbe5ea}.making-process h3{font-size:25px;font-weight:400;margin:12px 0}.making-process p{line-height:1.6;color:#718691}.making-process label{display:block;font-size:13px;color:#718691}.making-process select{width:100%;margin-top:10px}.making-process .micro-copy{font-size:11px;margin-bottom:0}.making-process a{display:block;margin-top:12px;font-size:11px;color:#718691}.comparison-only,.process-reading{font-size:12px;color:#84949d}.case-method{line-height:1.5}
 @media(max-width:760px){.site-header{padding:13px 5%}.lab-brand{width:165px}}
 @media(max-width:420px){.lab-brand{width:145px}}
