@@ -9,5 +9,6 @@ for(const name of ['index.html','style.css','app.js','ai-lace-study.png','luzzu-
 fs.copyFileSync(path.join(root,'worker','index.js'),path.join(output,'server','index.js'));
 fs.copyFileSync(path.join(root,'worker','bobbin-brief.js'),path.join(output,'server','bobbin-brief.js'));
 fs.copyFileSync(path.join(output,'bobbin-ui.js'),path.join(output,'client','bobbin-ui.js'));
+for(const name of ['fabrication.js','fabrication-mesh.js','fabrication-view.js','fabrication-smooth.js','fabrication-worker.js','fabrication-lines.js'])fs.copyFileSync(path.join(output,name),path.join(output,'client',name));
 fs.copyFileSync(path.join(root,'.openai','hosting.json'),path.join(output,'.openai','hosting.json'));
 console.log('Sites build ready: static assets and Worker entrypoint');

@@ -1,5 +1,6 @@
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 import { setupBobbinUI } from './bobbin-ui.js';
+import { setupFabrication } from './fabrication.js?v=lace-hierarchy-5';
 const apiOrigin='';
 const rosetteIcon='<circle cx="20" cy="20" r="6"/><g>'+Array.from({length:6},(_,i)=>`<ellipse cx="20" cy="8" rx="4" ry="7" transform="rotate(${i*60} 20 20)"/>`).join('')+'</g>';
 const motifs={rosette:{label:'Rosette',icon:rosetteIcon},scroll:{label:'Scroll',icon:'<path d="M7 28c18 2 4-22 19-20 11 1 1 17 7 14"/><path d="M10 10c2 8 10 6 12 0"/>'},botanical:{label:'Leaf vine',icon:'<path d="M20 34C7 26 7 11 29 7"/><path d="M18 27C8 27 6 18 8 15c6 0 10 3 10 12M23 18c0-8 6-11 12-10 0 6-4 9-12 10"/>'},diamond:{label:'Openwork',icon:'<path d="M20 3 36 20 20 37 4 20Z M20 10 29 20 20 30 11 20Z"/><path d="M4 20h32M20 3v34"/>'}};
@@ -78,3 +79,6 @@ const originalGenerate=generate;
 generate=async event=>{const previousImage=currentImage;Object.assign(settings,{process:'bobbin',reference:settings.reference||'none'});await originalGenerate(event);if(currentImage!==previousImage&&generatedSettings?.process==='bobbin'){$('#imageCaption').textContent='Bobbin lace study · '+$('#imageCaption').textContent;$('#resultNote').textContent='Bobbin visual hypothesis. Compare thread paths, woven areas and joins; a lace maker must check workability.'}};
 $('#patternForm').onsubmit=generate;
 sync();
+
+setupFabrication({getImage:()=>currentImage,showPage,toast});
+if(location.hash==='#fabrication')showPage('fabrication');

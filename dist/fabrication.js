@@ -1,0 +1,58 @@
+import {createModelView} from './fabrication-view.js?v=smooth-2';
+export function setupFabrication({getImage,showPage,toast}){
+ const nav=document.querySelector('header nav');nav.insertAdjacentHTML('beforeend','<button data-page="fabrication">Fabrication</button>');nav.lastElementChild.onclick=()=>showPage('fabrication');
+ document.querySelector('main').insertAdjacentHTML('beforeend',`<section id="fabrication" class="page" hidden><div class="page-heading"><p class="eyebrow">04 / FROM IMAGE TO MATERIAL</p><h1>Give the pattern<br>a little depth.</h1><p>A 3D-printed lace study. Translate a flat silhouette into a thin, open surface.</p></div><div class="choice-row"><button aria-pressed="true">3D printing</button><span class="micro-copy">Laser cut · coming later</span></div><div class="fabrication-grid"><div><div class="fabrication-stage"><canvas id="fabPreview" aria-label="Rotatable 3D preview of the fabrication model"></canvas><span class="fab-hint">Drag to orbit · scroll to zoom</span></div><div class="result-actions"><button id="fabView" class="text-button">Reset view ↺</button><span id="fabStats"></span></div><p id="fabMessage" role="status"></p></div><aside class="controls"><p class="eyebrow">3D PRINTED LACE / IMAGE EXTRUSION</p><h2>Silhouette → Surface</h2><button id="fabUse" class="pill-button">Use studio image ↗</button><label class="pill-button upload-button">Import a flat pattern<input id="fabUpload" class="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp"></label><p id="fabSource" class="micro-copy">No source loaded.</p><label>Material polarity<select id="fabPolarity"><option value="dark">Dark areas become material</option><option value="light">Light areas become material</option></select></label><div class="range-row"><label>Threshold <output id="fabThresholdValue">128</output></label><input id="fabThreshold" type="range" min="10" max="245" value="128"></div><div class="control-pair"><label>Width / mm<input id="fabWidth" type="number" min="10" max="300" value="80"></label><label>Thickness / mm<input id="fabThickness" type="number" min="0.4" max="10" step="0.2" value="1.2"></label></div><label>Sampling resolution<select id="fabResolution"><option value="64">64 · quick study</option><option value="96" selected>96 · balanced</option><option value="144">144 · finer silhouette</option></select></label><label class="checkbox-label"><input id="fabLargest" type="checkbox" checked> Keep the largest connected piece</label><label class="checkbox-label"><input id="fabFrame" type="checkbox" checked> Add a connected perimeter frame</label><button id="fabExport" class="generate-button" disabled>Download STL ↓</button><p class="micro-copy">Raster-based, stepped edges. This creates a printed silhouette, not a bobbin thread simulation or the artist’s original construction. STL coordinates use millimetres; confirm scale in your slicer. Inspect thin connections and print a small sample first.</p></aside></div></section>`);
+ document.querySelector('.result-actions div').insertAdjacentHTML('beforeend','<button id="toFabrication" class="text-button">Make in 3D ↗</button>');
+ document.querySelector('#fabSource').insertAdjacentHTML('afterend','<label>Surface smoothing<select id="fabSmoothing"><option value="1">Gentle · preserve fine threads</option><option value="2" selected>Balanced · soften corners</option><option value="3">Soft · round the outline</option></select></label>');
+ const $=id=>document.getElementById(id);let source=null,stl=null,worker=null,generation=0,rx=-0.65,rz=-0.35,zoom=1,last=null,frame=0;
+ $('fabLargest').closest('label').remove();$('fabFrame').checked=false;
+ $('fabSource').insertAdjacentHTML('afterend','<p class="micro-copy">1. Simplify the lines<br>2. Round the paths and join motifs<br>3. Check for one connected piece</p><label>Line simplification<select id="fabSimplify"><option value="0">Light · keep more detail</option><option value="1" selected>Balanced · clean fine noise</option><option value="2">Strong · fewer small details</option></select></label><label>Minimum line width / mm<input id="fabLineWidth" type="number" min="0.6" max="5" step="0.2" value="0.9"></label>');
+ $('fabPolarity').insertAdjacentHTML('afterbegin','<option value="auto" selected>Auto · detect the background</option>');$('fabPolarity').value='auto';
+ $('fabResolution').innerHTML='<option value="96">96 · quick draft</option><option value="144">144 · balanced</option><option value="192" selected>192 · fine lace</option>';
+ $('fabSmoothing').value='1';
+ document.querySelector('#fabrication .controls .eyebrow').textContent='3D PRINTED LACE / SMOOTH SURFACE';
+ document.querySelector('#fabrication .controls h2').textContent='Lines → One connected piece';
+ document.querySelector('#fabrication .controls > .micro-copy:last-child').textContent='Tiny image fragments are removed; simplified paths are rounded and linked with short bridges. Preview and STL share one checked, connected model. Line width may increase to survive the selected resolution and smoothing. Test a small print to check material strength.';
+ const canvas=$('fabPreview');let view=null;
+ try{view=createModelView(canvas)}catch(e){$('fabMessage').textContent=e.message}
+ canvas.insertAdjacentHTML('afterend','<div id="fabEmpty" class="fab-empty">Load a pattern to see the complete 3D model.</div>');
+ canvas.insertAdjacentHTML('afterend','<canvas id="fabLinePreview" aria-label="Simplified and connected line pattern" hidden></canvas>');
+ let lineMode=false;
+ $('fabView').insertAdjacentHTML('afterend','<button id="fabLines" class="text-button" aria-pressed="false">Simplified lines</button>');
+ $('fabLines').onclick=()=>{lineMode=!lineMode;$('fabLinePreview').hidden=!lineMode;canvas.hidden=lineMode;$('fabLines').setAttribute('aria-pressed',lineMode);};
+ $('fabView').insertAdjacentHTML('afterend','<button id="fabTop" class="text-button">Top view</button>');
+ $('fabTop').onclick=()=>{rx=0;rz=0;redraw()};
+ function draw(){frame=0;view?.draw(rx,rz,zoom)}
+ const redraw=()=>{if(!frame)frame=requestAnimationFrame(draw)};
+ let pixelCache=null;
+ function rebuild(){
+  worker?.terminate();worker=null;const id=++generation;stl=null;$('fabExport').disabled=true;
+  if(!source){redraw();return}
+  const n=Number($('fabResolution').value),width=Number($('fabWidth').value),thickness=Number($('fabThickness').value),lineWidth=Number($('fabLineWidth').value),height=width*source.naturalHeight/source.naturalWidth;
+  if(width<10||width>300||thickness<.4||thickness>10||!Number.isFinite(width+thickness+lineWidth)||lineWidth<.6||lineWidth>5||height>600){$('fabMessage').textContent='Use width 10–300 mm, thickness 0.4–10 mm, line width 0.6–5 mm, and an image shorter than 600 mm.';return}
+  if(!pixelCache||pixelCache.n!==n){const c=document.createElement('canvas');c.width=c.height=n;const ctx=c.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,n,n);ctx.drawImage(source,0,0,n,n);const rgba=ctx.getImageData(0,0,n,n).data,pixels=new Uint8Array(n*n);for(let i=0;i<pixels.length;i++)pixels[i]=.2126*rgba[i*4]+.7152*rgba[i*4+1]+.0722*rgba[i*4+2];pixelCache={n,pixels}}
+  $('fabMessage').textContent='Simplifying lines, rounding paths and joining motifs…';$('fabPreview').setAttribute('aria-busy','true');
+  try{
+   worker=new Worker(new URL('./fabrication-worker.js?v=lace-hierarchy-5',import.meta.url),{type:'module'});
+   worker.onmessage=({data})=>{
+    if(id!==generation)return;worker.terminate();worker=null;$('fabPreview').setAttribute('aria-busy','false');
+    if(data.error){$('fabMessage').textContent=data.error;return}
+    stl=data.stl;view?.setPacked(data.packed,data.extent);$('fabEmpty').hidden=!!data.faces;
+    const flat=$('fabLinePreview');flat.width=flat.height=data.n;const ctx=flat.getContext('2d'),img=ctx.createImageData(data.n,data.n);for(let i=0;i<data.lineMask.length;i++){img.data[i*4]=55;img.data[i*4+1]=80;img.data[i*4+2]=92;img.data[i*4+3]=data.lineMask[i]?255:0;}ctx.putImageData(img,0,0);
+    $('fabStats').textContent=`${width.toFixed(1)} × ${height.toFixed(1)} × ${thickness.toFixed(1)} mm · ${data.faces.toLocaleString()} faces · full model`;
+    $('fabMessage').textContent=!data.faces?'No surface remains. Adjust polarity, threshold or simplification.':data.invalidEdges?`${data.invalidEdges} mesh edges need repair. Try a different threshold or smoothing level.`:data.components!==1?'The model still has separate pieces. Export is disabled.':`1 connected piece · ${data.bridges} short bridges added · line width ${data.lineWidth.toFixed(2)} mm · ${(data.elapsed/1000).toFixed(2)}s${data.discardedFaces?' · residual disconnected shells removed':''}. Check Simplified lines to see how the image was rebuilt.`;
+    $('fabExport').disabled=!data.faces||!!data.invalidEdges||data.components!==1;redraw();
+   };
+   worker.onerror=()=>{if(id!==generation)return;worker?.terminate();worker=null;$('fabPreview').setAttribute('aria-busy','false');$('fabMessage').textContent='The background model builder could not load. Reload the page and try again.'};
+   let light=$('fabPolarity').value==='light';if($('fabPolarity').value==='auto'){const border=[];for(let i=0;i<n;i++){border.push(pixelCache.pixels[i],pixelCache.pixels[(n-1)*n+i],pixelCache.pixels[i*n],pixelCache.pixels[i*n+n-1]);}border.sort((a,b)=>a-b);light=border[Math.floor(border.length/2)]<128;}
+   worker.postMessage({pixels:pixelCache.pixels,n,width,height,thickness,threshold:Number($('fabThreshold').value),light,lineWidth,simplification:Number($('fabSimplify').value),frame:$('fabFrame').checked,smoothing:Number($('fabSmoothing').value)});
+  }catch(e){$('fabMessage').textContent=e.message}
+ }
+ let loadId=0;
+ async function load(src,label){const id=++loadId;try{const img=new Image();img.src=src;await img.decode();if(id!==loadId)return;source=img;pixelCache=null;$('fabThreshold').value=128;$('fabThresholdValue').value=128;$('fabSource').textContent=label;rebuild()}catch{$('fabMessage').textContent='Image could not be loaded. Try a local PNG, JPEG or WebP.'}}
+ const use=()=>load(getImage(),'Studio image · manually check material polarity');$('fabUse').onclick=use;$('toFabrication').onclick=()=>{showPage('fabrication');use()};$('fabUpload').onchange=async e=>{const file=e.target.files[0];if(!file)return;if(file.size>20*1024*1024){toast('Use an image smaller than 20 MB');return}const url=URL.createObjectURL(file);await load(url,file.name);URL.revokeObjectURL(url)};
+ let rebuildTimer=0;
+ for(const id of ['fabThreshold','fabWidth','fabThickness','fabResolution','fabPolarity','fabFrame','fabSmoothing','fabSimplify','fabLineWidth'])$(id).oninput=()=>{if(id==='fabThreshold')$('fabThresholdValue').value=$('fabThreshold').value;$('fabExport').disabled=true;worker?.terminate();worker=null;generation++;clearTimeout(rebuildTimer);rebuildTimer=setTimeout(rebuild,180)};
+ canvas.onpointerdown=e=>{last=[e.clientX,e.clientY];canvas.setPointerCapture(e.pointerId)};canvas.onpointermove=e=>{if(!last)return;rz+=(e.clientX-last[0])*.009;rx=Math.max(-1.5,Math.min(1.5,rx+(e.clientY-last[1])*.009));last=[e.clientX,e.clientY];redraw()};canvas.onpointerup=canvas.onpointercancel=()=>last=null;canvas.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.max(.3,Math.min(4,zoom*Math.exp(-e.deltaY*.001)));redraw()},{passive:false});$('fabView').onclick=()=>{rx=-.65;rz=-.35;zoom=1;redraw()};new ResizeObserver(redraw).observe(canvas);
+ $('fabExport').onclick=()=>{if($('fabExport').disabled||!stl)return;const url=URL.createObjectURL(new Blob([stl],{type:'model/stl'})),a=document.createElement('a');a.href=url;a.download='lace-lab-smooth-study-mm.stl';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('STL exported · confirm millimetres in your slicer')};
+}
