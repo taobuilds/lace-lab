@@ -9,10 +9,12 @@ export function setupFabrication({getImage,showPage,toast}){
  $('fabSource').insertAdjacentHTML('afterend','<p class="micro-copy">1. Simplify the lines<br>2. Round the paths and join motifs<br>3. Check for one connected piece</p><label>Line simplification<select id="fabSimplify"><option value="0">Light · keep more detail</option><option value="1" selected>Balanced · clean fine noise</option><option value="2">Strong · fewer small details</option></select></label><label>Minimum line width / mm<input id="fabLineWidth" type="number" min="0.6" max="5" step="0.2" value="0.9"></label>');
  $('fabPolarity').insertAdjacentHTML('afterbegin','<option value="auto" selected>Auto · detect the background</option>');$('fabPolarity').value='auto';
  $('fabResolution').innerHTML='<option value="96">96 · quick draft</option><option value="144">144 · balanced</option><option value="192" selected>192 · fine lace</option>';
- $('fabSmoothing').value='1';
+ $('fabSmoothing').insertAdjacentHTML('afterbegin','<option value="0">Crisp · preserve mesh openings</option>');$('fabSmoothing').value='0';
  document.querySelector('#fabrication .controls .eyebrow').textContent='3D PRINTED LACE / SMOOTH SURFACE';
  document.querySelector('#fabrication .controls h2').textContent='Lines → One connected piece';
  document.querySelector('#fabrication .controls > .micro-copy:last-child').textContent='Tiny image fragments are removed; simplified paths are rounded and linked with short bridges. Preview and STL share one checked, connected model. Line width may increase to survive the selected resolution and smoothing. Test a small print to check material strength.';
+ $('fabSource').insertAdjacentHTML('afterend','<label>Model style<select id="fabRelief"><option value="relief" selected>Detailed openwork relief</option><option value="lines">Simplified connected lines</option></select></label><label>Raised ornament / mm<input id="fabDepth" type="number" min="0" max="3" step="0.1" value="0.8"></label><p class="micro-copy">Relief preserves the black-and-white silhouette. Wider strokes rise above fine mesh; holes stay open. Height is inferred from stroke width, not recovered from a photograph. Short cracks are repaired and fragile joins reinforced. Minimum line width controls local reinforcement; line simplification applies only to Simplified connected lines.</p>');
+ $('fabResolution').insertAdjacentHTML('beforeend','<option value="256">256 · detailed relief</option>');$('fabResolution').value='256';
  const canvas=$('fabPreview');let view=null;
  try{view=createModelView(canvas)}catch(e){$('fabMessage').textContent=e.message}
  canvas.insertAdjacentHTML('afterend','<div id="fabEmpty" class="fab-empty">Load a pattern to see the complete 3D model.</div>');
@@ -24,35 +26,39 @@ export function setupFabrication({getImage,showPage,toast}){
  $('fabTop').onclick=()=>{rx=0;rz=0;redraw()};
  function draw(){frame=0;view?.draw(rx,rz,zoom)}
  const redraw=()=>{if(!frame)frame=requestAnimationFrame(draw)};
+ $('fabSource').insertAdjacentHTML('afterend','<label class="checkbox-label"><input id="fabFine" type="checkbox" checked> Preserve pale, fine threads</label><p class="micro-copy">Boosts pale line contrast and keeps thin strokes during image sampling. Turn off for noisy photographs.</p>');
  let pixelCache=null;
  function rebuild(){
   worker?.terminate();worker=null;const id=++generation;stl=null;$('fabExport').disabled=true;
   if(!source){redraw();return}
   const n=Number($('fabResolution').value),width=Number($('fabWidth').value),thickness=Number($('fabThickness').value),lineWidth=Number($('fabLineWidth').value),height=width*source.naturalHeight/source.naturalWidth;
   if(width<10||width>300||thickness<.4||thickness>10||!Number.isFinite(width+thickness+lineWidth)||lineWidth<.6||lineWidth>5||height>600){$('fabMessage').textContent='Use width 10–300 mm, thickness 0.4–10 mm, line width 0.6–5 mm, and an image shorter than 600 mm.';return}
-  if(!pixelCache||pixelCache.n!==n){const c=document.createElement('canvas');c.width=c.height=n;const ctx=c.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,n,n);ctx.drawImage(source,0,0,n,n);const rgba=ctx.getImageData(0,0,n,n).data,pixels=new Uint8Array(n*n);for(let i=0;i<pixels.length;i++)pixels[i]=.2126*rgba[i*4]+.7152*rgba[i*4+1]+.0722*rgba[i*4+2];pixelCache={n,pixels}}
+  if(!pixelCache||pixelCache.n!==n){const c=document.createElement('canvas'),s=n*4;c.width=c.height=s;const ctx=c.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,s,s);ctx.drawImage(source,0,0,s,s);const rgba=ctx.getImageData(0,0,s,s).data,pixels=new Uint8Array(n*n),dark=new Uint8Array(n*n),bright=new Uint8Array(n*n);for(let y=0;y<n;y++)for(let x=0;x<n;x++){let sum=0,lo=255,hi=0;for(let dy=0;dy<4;dy++)for(let dx=0;dx<4;dx++){const i=((y*4+dy)*s+x*4+dx)*4,v=.2126*rgba[i]+.7152*rgba[i+1]+.0722*rgba[i+2];sum+=v;lo=Math.min(lo,v);hi=Math.max(hi,v);}const p=y*n+x;pixels[p]=sum/16;dark[p]=lo;bright[p]=hi;}pixelCache={n,pixels,dark,bright}}
   $('fabMessage').textContent='Simplifying lines, rounding paths and joining motifs…';$('fabPreview').setAttribute('aria-busy','true');
   try{
-   worker=new Worker(new URL('./fabrication-worker.js?v=lace-hierarchy-5',import.meta.url),{type:'module'});
+   worker=new Worker(new URL('./fabrication-worker.js?v=fine-threads-9',import.meta.url),{type:'module'});
    worker.onmessage=({data})=>{
     if(id!==generation)return;worker.terminate();worker=null;$('fabPreview').setAttribute('aria-busy','false');
     if(data.error){$('fabMessage').textContent=data.error;return}
     stl=data.stl;view?.setPacked(data.packed,data.extent);$('fabEmpty').hidden=!!data.faces;
     const flat=$('fabLinePreview');flat.width=flat.height=data.n;const ctx=flat.getContext('2d'),img=ctx.createImageData(data.n,data.n);for(let i=0;i<data.lineMask.length;i++){img.data[i*4]=55;img.data[i*4+1]=80;img.data[i*4+2]=92;img.data[i*4+3]=data.lineMask[i]?255:0;}ctx.putImageData(img,0,0);
-    $('fabStats').textContent=`${width.toFixed(1)} × ${height.toFixed(1)} × ${thickness.toFixed(1)} mm · ${data.faces.toLocaleString()} faces · full model`;
+    $('fabStats').textContent=`${width.toFixed(1)} × ${height.toFixed(1)} × ${(data.maxHeight||thickness).toFixed(2)} mm · ${data.faces.toLocaleString()} faces · full model`;
     $('fabMessage').textContent=!data.faces?'No surface remains. Adjust polarity, threshold or simplification.':data.invalidEdges?`${data.invalidEdges} mesh edges need repair. Try a different threshold or smoothing level.`:data.components!==1?'The model still has separate pieces. Export is disabled.':`1 connected piece · ${data.bridges} short bridges added · line width ${data.lineWidth.toFixed(2)} mm · ${(data.elapsed/1000).toFixed(2)}s${data.discardedFaces?' · residual disconnected shells removed':''}. Check Simplified lines to see how the image was rebuilt.`;
+    if($('fabRelief').value==='relief'&&data.faces&&!data.invalidEdges&&data.components===1)$('fabMessage').textContent=`Openwork relief · 1 connected piece · maximum height ${data.maxHeight.toFixed(2)} mm · ${(data.elapsed/1000).toFixed(2)}s. Heights are inferred from stroke width. Check fine features in your slicer before printing.`;
+    $('fabLines').textContent=$('fabRelief').value==='relief'?'Black & white mask':'Simplified lines';
+    $('fabSimplify').disabled=$('fabRelief').value==='relief';$('fabLineWidth').disabled=false;
     $('fabExport').disabled=!data.faces||!!data.invalidEdges||data.components!==1;redraw();
    };
    worker.onerror=()=>{if(id!==generation)return;worker?.terminate();worker=null;$('fabPreview').setAttribute('aria-busy','false');$('fabMessage').textContent='The background model builder could not load. Reload the page and try again.'};
    let light=$('fabPolarity').value==='light';if($('fabPolarity').value==='auto'){const border=[];for(let i=0;i<n;i++){border.push(pixelCache.pixels[i],pixelCache.pixels[(n-1)*n+i],pixelCache.pixels[i*n],pixelCache.pixels[i*n+n-1]);}border.sort((a,b)=>a-b);light=border[Math.floor(border.length/2)]<128;}
-   worker.postMessage({pixels:pixelCache.pixels,n,width,height,thickness,threshold:Number($('fabThreshold').value),light,lineWidth,simplification:Number($('fabSimplify').value),frame:$('fabFrame').checked,smoothing:Number($('fabSmoothing').value)});
+   worker.postMessage({pixels:$('fabFine').checked?(light?pixelCache.bright:pixelCache.dark):pixelCache.pixels,preserveFine:$('fabFine').checked,n,width,height,thickness,threshold:Number($('fabThreshold').value),light,lineWidth,simplification:Number($('fabSimplify').value),frame:$('fabFrame').checked,smoothing:Number($('fabSmoothing').value),relief:$('fabRelief').value==='relief',depth:Math.max(0,Math.min(3,Number($('fabDepth').value)||0))});
   }catch(e){$('fabMessage').textContent=e.message}
  }
  let loadId=0;
  async function load(src,label){const id=++loadId;try{const img=new Image();img.src=src;await img.decode();if(id!==loadId)return;source=img;pixelCache=null;$('fabThreshold').value=128;$('fabThresholdValue').value=128;$('fabSource').textContent=label;rebuild()}catch{$('fabMessage').textContent='Image could not be loaded. Try a local PNG, JPEG or WebP.'}}
  const use=()=>load(getImage(),'Studio image · manually check material polarity');$('fabUse').onclick=use;$('toFabrication').onclick=()=>{showPage('fabrication');use()};$('fabUpload').onchange=async e=>{const file=e.target.files[0];if(!file)return;if(file.size>20*1024*1024){toast('Use an image smaller than 20 MB');return}const url=URL.createObjectURL(file);await load(url,file.name);URL.revokeObjectURL(url)};
  let rebuildTimer=0;
- for(const id of ['fabThreshold','fabWidth','fabThickness','fabResolution','fabPolarity','fabFrame','fabSmoothing','fabSimplify','fabLineWidth'])$(id).oninput=()=>{if(id==='fabThreshold')$('fabThresholdValue').value=$('fabThreshold').value;$('fabExport').disabled=true;worker?.terminate();worker=null;generation++;clearTimeout(rebuildTimer);rebuildTimer=setTimeout(rebuild,180)};
+ for(const id of ['fabFine','fabRelief','fabDepth','fabThreshold','fabWidth','fabThickness','fabResolution','fabPolarity','fabFrame','fabSmoothing','fabSimplify','fabLineWidth'])$(id).oninput=()=>{if(id==='fabThreshold')$('fabThresholdValue').value=$('fabThreshold').value;$('fabExport').disabled=true;worker?.terminate();worker=null;generation++;clearTimeout(rebuildTimer);rebuildTimer=setTimeout(rebuild,180)};
  canvas.onpointerdown=e=>{last=[e.clientX,e.clientY];canvas.setPointerCapture(e.pointerId)};canvas.onpointermove=e=>{if(!last)return;rz+=(e.clientX-last[0])*.009;rx=Math.max(-1.5,Math.min(1.5,rx+(e.clientY-last[1])*.009));last=[e.clientX,e.clientY];redraw()};canvas.onpointerup=canvas.onpointercancel=()=>last=null;canvas.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.max(.3,Math.min(4,zoom*Math.exp(-e.deltaY*.001)));redraw()},{passive:false});$('fabView').onclick=()=>{rx=-.65;rz=-.35;zoom=1;redraw()};new ResizeObserver(redraw).observe(canvas);
  $('fabExport').onclick=()=>{if($('fabExport').disabled||!stl)return;const url=URL.createObjectURL(new Blob([stl],{type:'model/stl'})),a=document.createElement('a');a.href=url;a.download='lace-lab-smooth-study-mm.stl';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('STL exported · confirm millimetres in your slicer')};
 }

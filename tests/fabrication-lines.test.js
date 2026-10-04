@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {prepareLines,meshConnectedPieces,joinNearbyEnds} from '../dist/fabrication-lines.js';
+import {prepareLines,meshConnectedPieces,joinNearbyEnds,repairReliefMask} from '../dist/fabrication-lines.js';
 import {smoothLace} from '../dist/fabrication-smooth.js';
 import {meshCheck} from '../dist/fabrication-mesh.js';
 test('separate motifs are simplified, rounded and joined into one actual mesh',()=>{
@@ -20,4 +20,11 @@ test('nearby open ends close a gap even within an already connected motif',()=>{
  assert.ok(joinNearbyEnds(mask,n,8)>0);
  for(let y=17;y<=21;y++)assert.equal(mask[y*n+30],1);
  assert.equal(mask[19*n+19],0,'the enclosed opening remains empty');
+});
+test('relief repairs short cracks while preserving ornaments and large holes',()=>{
+ const n=48,mask=new Uint8Array(n*n);for(let y=7;y<41;y++)for(let x=7;x<41;x++)if(x<10||x>37||y<10||y>37)mask[y*n+x]=1;
+ for(let y=20;y<23;y++)for(let x=37;x<41;x++)mask[y*n+x]=0;
+ const repaired=repairReliefMask(mask,n,48,48,.9);
+ assert.ok(mask.every((v,i)=>!v||repaired.mask[i]));assert.equal(repaired.mask[21*n+39],1);assert.equal(repaired.mask[24*n+24],0);
+ const mesh=smoothLace(repaired.mask,n,48,48,.8,1);assert.equal(meshCheck(mesh).invalidEdges,0);assert.equal(meshConnectedPieces(mesh).count,1);
 });

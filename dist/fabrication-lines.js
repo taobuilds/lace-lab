@@ -15,7 +15,7 @@ function thin(input,n){
   }for(const p of remove)mask[p]=0;if(remove.length)changed=true;
  }}return mask;
 }
-function connect(mask,n){
+export function connect(mask,n){
  const {labels,pieces}=groups(mask,n);if(pieces.length<=1)return 0;
  const parent=pieces.map((_,i)=>i),root=i=>{while(parent[i]!==i){parent[i]=parent[parent[i]];i=parent[i]}return i;};
  const owner=labels.slice(),prev=new Int32Array(mask.length).fill(-1),queue=[];
@@ -75,6 +75,30 @@ export function joinNearbyEnds(mask,n,maxGap){
   for(let j=0;j<=steps;j++)mask[Math.round(y+(by-y)*j/steps)*n+Math.round(x+(bx-x)*j/steps)]=1;
   added++;
  }return added;
+}
+export function repairReliefMask(input,n,width,height,lineWidth=.9){
+ const mask=input.slice();
+ // Repair only endpoint gaps; closing the entire image fills lace ground holes.
+ const skeleton=thin(mask,n),before=skeleton.slice();
+ const bridges=joinNearbyEnds(skeleton,n,Math.max(10,n*.025));
+ for(let i=0;i<mask.length;i++)if(skeleton[i]&&!before[i])mask[i]=1;
+ const prior=mask.slice(),pieceBridges=connect(mask,n);
+ const radius=Math.max(1.1,lineWidth/(2*Math.min(width/n,height/n)));
+ const stamp=(p)=>{const cx=p%n,cy=(p/n)|0;for(let y=Math.max(0,Math.floor(cy-radius));y<=Math.min(n-1,Math.ceil(cy+radius));y++)for(let x=Math.max(0,Math.floor(cx-radius));x<=Math.min(n-1,Math.ceil(cx+radius));x++)if((x-cx)**2+(y-cy)**2<=radius*radius)mask[y*n+x]=1;};
+ // Reinforce added bridges only; original thin ground strands keep their width.
+ const joined=mask.slice();
+ for(let p=0;p<prior.length;p++)if((joined[p]&&!prior[p])||(skeleton[p]&&!before[p]))stamp(p);
+ // A diagonal pixel touch is not a printable shared surface. Add one local
+ // elbow so the implicit surface retains a real connection after smoothing.
+ const diagonal=mask.slice();for(let y=0;y<n-1;y++)for(let x=0;x<n-1;x++){const p=y*n+x;if(diagonal[p]&&diagonal[p+n+1]&&!diagonal[p+1]&&!diagonal[p+n])mask[p+1]=1;else if(diagonal[p+1]&&diagonal[p+n]&&!diagonal[p]&&!diagonal[p+n+1])mask[p]=1;}
+ return {mask,bridges:bridges+pieceBridges};
+}
+export function normalizeLaceInk(pixels,light=false){
+ const histogram=new Uint32Array(256);for(const value of pixels)histogram[light?255-value:value]++;
+ const percentile=f=>{let total=0;for(let i=0;i<256;i++){total+=histogram[i];if(total>=pixels.length*f)return i;}return 255;};
+ const ink=percentile(.03),background=percentile(.95),span=background-ink;
+ if(span<12)return pixels;
+ return pixels.map(v=>{const value=light?255-v:v,norm=Math.max(0,Math.min(255,(value-ink)*255/span));return light?255-norm:norm;});
 }
 export function prepareLines(input,n,width,height,lineWidth=1.2,smoothing=1,simplification=1){
  const source=groups(input,n);let clean=input.slice(),removed=0;

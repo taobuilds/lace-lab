@@ -4,11 +4,11 @@ export function smoothLace(mask,n,width,height,thickness,smoothing=2){
  const size=n+4,area=size*size,stepX=width/n,stepY=height/n;
  let field=new Float64Array(area);
  for(let y=0;y<n;y++)for(let x=0;x<n;x++)field[(y+2)*size+x+2]=mask[y*n+x];
- for(let pass=0;pass<smoothing;pass++){
+ for(let pass=0;pass<Math.max(1,smoothing);pass++){
   const next=new Float64Array(area);
   for(let y=1;y<size-1;y++)for(let x=1;x<size-1;x++){
    const i=y*size+x;next[i]=(4*field[i]+2*(field[i-1]+field[i+1]+field[i-size]+field[i+size])+field[i-size-1]+field[i-size+1]+field[i+size-1]+field[i+size+1])/16;
-  }field=next;
+  }if(smoothing===0)for(let i=0;i<area;i++)next[i]=field[i]*.75+next[i]*.25;field=next;
  }
  const layers=4,zStep=thickness/(layers-2),zStart=-zStep/2,values=new Float64Array(area*(layers+1));
  const blend=Math.min(thickness*.18,Math.min(stepX,stepY)*.35);
@@ -36,5 +36,17 @@ export function smoothLace(mask,n,width,height,thickness,smoothing=2){
    else {const [a,b]=inside,[c,d]=outside,p=edge(a,c),q=edge(a,d),r=edge(b,d),s=edge(b,c);add(p,q,r);add(p,r,s);}
   }
  }
+ return mesh;
+}
+// A shared continuous height field deforms every coincident vertex identically.
+// Wide ornamental strokes rise above thin mesh; the bottom remains planar.
+export function applyLaceRelief(mesh,mask,n,width,height,thickness,depth){
+ const distance=new Float64Array(n*n);
+ for(let i=0;i<distance.length;i++)distance[i]=mask[i]?n:0;
+ for(let y=0;y<n;y++)for(let x=0;x<n;x++){const i=y*n+x;if(!mask[i])continue;distance[i]=Math.min(distance[i],x?distance[i-1]+1:1,y?distance[i-n]+1:1);}
+ for(let y=n-1;y>=0;y--)for(let x=n-1;x>=0;x--){const i=y*n+x;if(!mask[i])continue;distance[i]=Math.min(distance[i],x<n-1?distance[i+1]+1:1,y<n-1?distance[i+n]+1:1);}
+ const sample=(x,y)=>{x=Math.max(0,Math.min(n-1,x));y=Math.max(0,Math.min(n-1,y));const a=Math.floor(x),b=Math.floor(y),u=x-a,v=y-b,c=Math.min(n-1,a+1),d=Math.min(n-1,b+1);return distance[b*n+a]*(1-u)*(1-v)+distance[b*n+c]*u*(1-v)+distance[d*n+a]*(1-u)*v+distance[d*n+c]*u*v;};
+ const visited=new WeakSet();
+ for(const triangle of mesh)for(const p of triangle){if(visited.has(p))continue;visited.add(p);const d=sample((p[0]+width/2)*n/width-.5,(p[1]+height/2)*n/height-.5);const rise=depth*(1-Math.exp(-Math.max(0,d-.65)/2));p[2]*=1+rise/thickness;}
  return mesh;
 }

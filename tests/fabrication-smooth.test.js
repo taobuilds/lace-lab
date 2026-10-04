@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {smoothLace} from '../dist/fabrication-smooth.js';
+import {smoothLace,applyLaceRelief} from '../dist/fabrication-smooth.js';
 import {meshCheck} from '../dist/fabrication-mesh.js';
 test('rounded ring is watertight with an open center and positive volume',()=>{
  const n=32,mask=new Uint8Array(n*n);for(let y=0;y<n;y++)for(let x=0;x<n;x++){const r=Math.hypot(x-15.5,y-15.5);mask[y*n+x]=r<13&&r>7?1:0;}
@@ -12,4 +12,11 @@ test('rounded ring is watertight with an open center and positive volume',()=>{
 test('diagonal pixel contacts are rebuilt without non-manifold edges',()=>{
  const mask=new Uint8Array(16*16);for(let y=2;y<14;y++)for(let x=2;x<14;x++)if((x+y)%4<2)mask[y*16+x]=1;
  const mesh=smoothLace(mask,16,40,40,1.2,1);assert.ok(mesh.length);assert.equal(meshCheck(mesh).invalidEdges,0);
+});
+test('openwork relief raises broad ornaments above fine mesh without breaking the surface',()=>{
+ const n=48,mask=new Uint8Array(n*n);for(let y=6;y<42;y++)for(let x=6;x<42;x++)if((x>=10&&x<=18)||(y>=22&&y<=25))mask[y*n+x]=1;
+ const mesh=smoothLace(mask,n,48,48,.6,1);applyLaceRelief(mesh,mask,n,48,48,.6,1);
+ assert.equal(meshCheck(mesh).invalidEdges,0);
+ const points=mesh.flat(),broad=Math.max(...points.filter(p=>p[0]<-8&&p[0]>-12).map(p=>p[2])),fine=Math.max(...points.filter(p=>p[0]>5).map(p=>p[2]));
+ assert.ok(broad>fine+.15);assert.ok(broad>.8);assert.ok(broad<=1.6);assert.ok(points.every(p=>p[2]>=-.001));
 });
